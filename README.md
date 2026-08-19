@@ -1,3 +1,3 @@
 # Bitacora de Plantas
 
-README de prueba (push directo del bot).
+SEGUNDO push directo del bot (test de reglas).
