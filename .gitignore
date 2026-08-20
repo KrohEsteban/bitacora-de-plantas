@@ -13,6 +13,7 @@ bitacora-plantas
 
 # Test binary, built with `go test -c`
 *.test
+!Dockerfile.test
 
 # Output of the go coverage tool
 *.out
