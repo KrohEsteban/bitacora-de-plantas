@@ -1,0 +1,24 @@
+# Ignore data directory
+data/
+
+# Ignore Go binary
+bitacora-plantas
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore development files
+*.log
+.DS_Store
+Thumbs.db
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore temporary files
+tmp/
+*.tmp

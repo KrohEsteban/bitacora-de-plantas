@@ -1,0 +1,36 @@
+{{if .Plants}}
+    {{range .Plants}}
+    {{$name := .Name}}
+    {{$count := len .Images}}
+    <div class="plant-card"
+         hx-get="/planta/{{.Slug}}"
+         hx-target="#detail-container"
+         hx-swap="innerHTML">
+        {{if .Images}}
+            <div class="plant-mosaic">
+                {{range .MosaicLayout}}
+                <img class="mosaic-photo"
+                     src="{{.URL}}?thumb=1"
+                     alt="{{$name}}"
+                     loading="lazy"
+                     style="left:{{printf "%.2f" (add 50.0 (mul .RadiusPct (cosDeg .Angle)))}}%; top:{{printf "%.2f" (add 50.0 (mul .RadiusPct (sinDeg .Angle)))}}%; width:{{.SizePct}}%; height:{{.SizePct}}%; --rot:{{printf "%.1f" .Rotate}}deg; z-index:{{.Z}};">
+                {{end}}
+                <div class="plant-mosaic-overlay">
+                    <span class="plant-mosaic-name">{{$name}}</span>
+                    <span class="plant-mosaic-badge">📸 {{$count}}</span>
+                </div>
+            </div>
+        {{else}}
+            <div class="plant-card-image plant-card-placeholder">
+                <span>🌱</span>
+            </div>
+        {{end}}
+    </div>
+    {{end}}
+{{else}}
+    <div class="empty-state">
+        <div class="empty-state-icon">🌿</div>
+        <h2>¡Empieza tu bitácora!</h2>
+        <p>Aún no tienes plantas registradas. Crea tu primera planta para comenzar.</p>
+    </div>
+{{end}}
