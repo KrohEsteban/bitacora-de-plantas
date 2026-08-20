@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitácora de Plantas</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js" integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.7/dist/cdn.min.js" defer></script>
+</head>
+<body x-data="{ 
+    showCreateModal: false,
+    showDetailView: false,
+    currentPlant: null,
+    showEditModal: false,
+    showAddImagesModal: false,
+    showDeleteModal: false,
+    selectedFilesCount: 0
+}">
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <h1 class="header-title">🌿 Bitácora de Plantas</h1>
+            <button 
+                class="btn btn-primary" 
+                @click="showCreateModal = true"
+                type="button">
+                + Nueva Planta
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Plant Grid Container -->
+        <div id="plant-grid" 
+             class="plant-grid"
+             :class="{ 'hidden': showDetailView }"
+             x-on:htmx:after-swap="$event.detail.requestConfig && $event.detail.requestConfig.verb === 'delete' ? (showDeleteModal = false, showDetailView = false, currentPlant = null) : null">
+            {{template "plant-grid.html" .}}
+        </div>
+
+        <!-- Detail View Container -->
+        <div id="detail-container" 
+             class="detail-container"
+             :class="{ 'hidden': !showDetailView }"
+             x-on:htmx:after-swap="showDetailView = true">
+        </div>
+    </main>
+
+    <!-- Create Plant Modal -->
+    <div x-show="showCreateModal" 
+         x-transition.opacity
+         class="modal-overlay" 
+         @click.self="showCreateModal = false">
+        <div class="modal" @click.stop>
+            <div class="modal-header">
+                <h2>Nueva Planta</h2>
+                <button @click="showCreateModal = false" class="btn-close">&times;</button>
+            </div>
+            <form hx-post="/plantas" 
+                  hx-target="#plant-grid" 
+                  hx-swap="innerHTML"
+                  hx-encoding="multipart/form-data"
+                  hx-indicator="#creating-indicator"
+                  x-on:htmx:before-request="showCreateModal = false; $el.reset()"
+                  class="modal-body">
+                <div class="form-group">
+                    <label for="name">Nombre de la planta *</label>
+                    <input type="text" id="name" name="name" required placeholder="Ej: Rosa del jardín">
+                </div>
+                <div class="form-group">
+                    <label for="description">Descripción y cuidados</label>
+                    <textarea id="description" name="description" rows="4" 
+                              placeholder="Información sobre cuidados, riego, temperatura, etc."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="images">Imágenes (opcional)</label>
+                    <input type="file" id="images" name="images" multiple accept="image/*" 
+                           class="file-input">
+                    <small class="form-hint">Máximo 50MB por imagen. Formatos: JPG, PNG, WebP</small>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" @click="showCreateModal = false" class="btn btn-secondary">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        Crear Planta
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Plant Modal -->
+    <div x-show="showEditModal" 
+         x-transition.opacity
+         class="modal-overlay" 
+         @click.self="showEditModal = false">
+        <div class="modal" @click.stop>
+            <div class="modal-header">
+                <h2>Editar Planta</h2>
+                <button @click="showEditModal = false" class="btn-close">&times;</button>
+            </div>
+            <form hx-put="" 
+                  hx-target="#detail-container" 
+                  hx-swap="innerHTML"
+                  hx-indicator="#saving-indicator"
+                  x-on:htmx:before-request="showEditModal = false"
+                  class="modal-body">
+                <div class="form-group">
+                    <label for="edit-name">Nombre de la planta *</label>
+                    <input type="text" id="edit-name" name="name" required 
+                           x-bind:value="currentPlant ? currentPlant.name : ''">
+                </div>
+                <div class="form-group">
+                    <label for="edit-description">Descripción y cuidados</label>
+                    <textarea id="edit-description" name="description" rows="4"
+                              x-bind:value="currentPlant ? currentPlant.description : ''"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" @click="showEditModal = false" class="btn btn-secondary">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-primary"
+                            x-bind:formaction="currentPlant ? `/planta/${currentPlant.slug}` : undefined">
+                        Guardar Cambios
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Images Modal -->
+    <div x-show="showAddImagesModal" 
+         x-transition.opacity
+         class="modal-overlay" 
+         @click.self="showAddImagesModal = false">
+        <div class="modal" @click.stop>
+            <div class="modal-header">
+                <h2>Agregar Imágenes</h2>
+                <button @click="showAddImagesModal = false" class="btn-close">&times;</button>
+            </div>
+            <form hx-post="" 
+                  hx-target="#detail-container" 
+                  hx-swap="innerHTML"
+                  hx-encoding="multipart/form-data"
+                  hx-indicator="#uploading-indicator"
+                  x-on:htmx:before-request="showAddImagesModal = false; $el.reset(); selectedFilesCount = 0"
+                  class="modal-body">
+                <div class="form-group">
+                    <label for="new-images">Seleccionar imágenes *</label>
+                    <input type="file" id="new-images" name="images" multiple accept="image/*" 
+                           class="file-input" required
+                           @change="selectedFilesCount = $event.target.files.length">
+                    <small class="form-hint">Podés seleccionar varias imágenes a la vez. Máximo 50MB por imagen. Formatos: JPG, PNG, WebP</small>
+                    <small x-show="selectedFilesCount > 0" 
+                           x-text="selectedFilesCount + (selectedFilesCount === 1 ? ' imagen seleccionada' : ' imágenes seleccionadas')"
+                           class="form-hint form-hint-count"></small>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" @click="showAddImagesModal = false" class="btn btn-secondary">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-primary"
+                            x-bind:formaction="currentPlant ? `/planta/${currentPlant.slug}/imagenes` : undefined">
+                        Subir Imágenes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Back to Grid Button (shown when in detail view) -->
+    <button x-show="showDetailView"
+            x-transition
+            @click="showDetailView = false; currentPlant = null"
+            class="back-button">
+        ← Volver a la vista general
+    </button>
+
+    <!-- Toast Indicators (shown by HTMX while a request runs) -->
+    <div id="creating-indicator" class="htmx-indicator toast-indicator">
+        <span class="toast-spinner"></span>
+        <span>⏳ Creando planta…</span>
+    </div>
+    <div id="uploading-indicator" class="htmx-indicator toast-indicator">
+        <span class="toast-spinner"></span>
+        <span>⏳ Subiendo imágenes…</span>
+    </div>
+    <div id="saving-indicator" class="htmx-indicator toast-indicator">
+        <span class="toast-spinner"></span>
+        <span>⏳ Guardando cambios…</span>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <span id="total-size">{{.TotalSize}}</span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<div class="plant-detail"
+     x-init="currentPlant = JSON.parse(document.getElementById('plant-data').textContent)">
+    <script type="application/json" id="plant-data">{{plantJSON .}}</script>
+    <div class="plant-detail-header">
+        <div class="plant-detail-info">
+            <h1 class="plant-detail-title">{{.Name}}</h1>
+            {{if .Description}}
+                <div class="plant-detail-description">
+                    {{range $line := split .Description "\n"}}
+                        {{if $line}}<p>{{$line}}</p>{{end}}
+                    {{end}}
+                </div>
+            {{end}}
+            <div class="plant-detail-meta">
+                <span>📅 Creada el {{.CreatedAt.Format "2 de January de 2006"}}</span>
+                {{if .Images}}
+                    <span>📸 {{len .Images}} imágenes</span>
+                {{end}}
+            </div>
+        </div>
+        
+        <div class="plant-detail-actions">
+            <button @click="showEditModal = true" class="btn btn-secondary btn-small">
+                ✏️ Editar
+            </button>
+            <button @click="showAddImagesModal = true" class="btn btn-primary btn-small">
+                📷 Agregar Imágenes
+            </button>
+            <button @click="showDeleteModal = true" class="btn btn-danger btn-small">
+                🗑️ Eliminar Planta
+            </button>
+        </div>
+    </div>
+
+    {{if .Images}}
+        <div class="plant-gallery">
+            {{range .Images}}
+            <div class="gallery-item">
+                <img src="{{.URL}}" 
+                     alt="{{$.Name}}" 
+                     class="gallery-image"
+                     loading="lazy">
+                <span class="gallery-date">{{.ModTime.Format "02/01/2006"}}</span>
+                <button hx-delete="/planta/{{$.Slug}}/imagenes/{{.Name}}"
+                        hx-target="#detail-container"
+                        hx-swap="innerHTML"
+                        hx-confirm="¿Estás seguro de que quieres eliminar esta imagen?"
+                        class="gallery-delete-btn"
+                        title="Eliminar imagen">
+                    🗑️
+                </button>
+            </div>
+            {{end}}
+        </div>
+    {{else}}
+        <div class="empty-gallery">
+            <div class="empty-gallery-icon">📷</div>
+            <h3>No hay imágenes aún</h3>
+            <p>Agrega algunas fotos para documentar el crecimiento de tu planta.</p>
+            <button @click="showAddImagesModal = true" class="btn btn-primary">
+                📷 Subir Primera Imagen
+            </button>
+        </div>
+    {{end}}
+
+    <!-- Confirm Delete Plant Modal -->
+    <div x-show="showDeleteModal" 
+         x-transition.opacity
+         class="modal-overlay" 
+         @click.self="showDeleteModal = false">
+        <div class="modal" @click.stop>
+            <div class="modal-header">
+                <h2>Eliminar Planta</h2>
+                <button @click="showDeleteModal = false" class="btn-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="confirm-delete-text">¿Eliminar la planta '{{.Name}}'? Se borrarán todas sus imágenes.</p>
+                <div class="modal-actions">
+                    <button type="button" @click="showDeleteModal = false" class="btn btn-secondary">
+                        Cancelar
+                    </button>
+                    <button type="button"
+                            hx-delete="/planta/{{.Slug}}"
+                            hx-target="#plant-grid"
+                            hx-swap="innerHTML"
+                            hx-push-url="/"
+                            class="btn btn-danger">
+                        Eliminar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
