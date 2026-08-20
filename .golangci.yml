@@ -1,0 +1,21 @@
+# golangci-lint configuration for Bitácora de Plantas.
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  # Defaults already enabled in golangci-lint v1: errcheck, govet,
+  # ineffassign, staticcheck, unused. We add misspell on top.
+  enable:
+    - misspell
+  disable:
+    # Merged into staticcheck on newer golangci-lint; avoid duplicate reports.
+    - gosimple
+
+issues:
+  # Test files legitimately build HTTP requests and exercise error paths
+  # without always asserting on them; keep the production code strict.
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck

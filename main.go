@@ -32,9 +32,30 @@ const (
 	thumbnailSize = 400      // max long side for mosaic thumbnails
 	displaySize   = 1200     // max long side for display/detail images
 	jpegQuality   = 82       // quality for derived JPEG versions
-	dataDir       = "data"
-	plantsDir     = "data/plants"
 )
+
+// dataDir and plantsDir hold the on-disk storage locations. They are
+// resolved from the environment once at startup so the app can point them at
+// a Docker volume and tests at an ephemeral directory. BITACORA_DATA_DIR
+// wins, then DATA_DIR (kept for backwards compatibility with the existing
+// compose setup), then the historical "data" default.
+var (
+	dataDir   string
+	plantsDir string
+)
+
+// initDataDirs resolves dataDir/plantsDir from the environment.
+func initDataDirs() {
+	root := os.Getenv("BITACORA_DATA_DIR")
+	if root == "" {
+		root = os.Getenv("DATA_DIR")
+	}
+	if root == "" {
+		root = "data"
+	}
+	dataDir = root
+	plantsDir = filepath.Join(root, "plants")
+}
 
 // imgMu serializes lazy generation of derived images so concurrent requests
 // for the same version can't write the same file at the same time.
@@ -187,12 +208,30 @@ func loadGridPlants() ([]Plant, error) {
 var templates *template.Template
 
 func main() {
-	// Ensure data directory exists
+	initDataDirs()
+
+	// Ensure data directories exist
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		log.Fatal("Error creating data directory:", err)
+	}
 	if err := os.MkdirAll(plantsDir, 0755); err != nil {
 		log.Fatal("Error creating data directory:", err)
 	}
 
-	// Load templates with custom functions
+	// Load templates
+	var err error
+	templates, err = loadTemplates()
+	if err != nil {
+		log.Fatal("Error loading templates:", err)
+	}
+
+	log.Println("Servidor iniciando en puerto 8080...")
+	log.Fatal(http.ListenAndServe(":8080", newMux()))
+}
+
+// loadTemplates parses every template in templates/ with the custom function
+// map. Extracted from main so tests can load the exact same set.
+func loadTemplates() (*template.Template, error) {
 	funcMap := template.FuncMap{
 		"split": strings.Split,
 		// plantJSON renders the plant data as a JSON-safe object usable inside
@@ -208,19 +247,32 @@ func main() {
 		},
 		// math helpers used by plant-grid.html to position each circular
 		// collage photo: left = 50 + R*cos(angle), top = 50 + R*sin(angle).
-		"add":    func(a, b float64) float64 { return a + b },
-		"mul":    func(a, b float64) float64 { return a * b },
-		"sinDeg": func(d float64) float64 { return math.Sin(d * math.Pi / 180.0) },
-		"cosDeg": func(d float64) float64 { return math.Cos(d * math.Pi / 180.0) },
+		"add":             func(a, b float64) float64 { return a + b },
+		"mul":             func(a, b float64) float64 { return a * b },
+		"sinDeg":          func(d float64) float64 { return math.Sin(d * math.Pi / 180.0) },
+		"cosDeg":          func(d float64) float64 { return math.Cos(d * math.Pi / 180.0) },
+		"formatDate":      formatDate,
+		"formatDateShort": formatDateShort,
 	}
 
-	var err error
-	templates, err = template.New("").Funcs(funcMap).ParseGlob("templates/*.html")
-	if err != nil {
-		log.Fatal("Error loading templates:", err)
-	}
+	return template.New("").Funcs(funcMap).ParseGlob("templates/*.html")
+}
 
-	// Routes
+// formatDate renders a timestamp in the Spanish journal style used by the
+// plant detail header, e.g. "19 de August de 2026".
+func formatDate(t time.Time) string {
+	return t.Format("2 de January de 2006")
+}
+
+// formatDateShort renders a timestamp in the compact DD/MM/YYYY style used by
+// the gallery captions.
+func formatDateShort(t time.Time) string {
+	return t.Format("02/01/2006")
+}
+
+// newMux returns the fully wired HTTP handler for the application. Extracted
+// from main so tests can exercise it with httptest.
+func newMux() http.Handler {
 	mux := http.NewServeMux()
 
 	// Static files first
@@ -236,8 +288,7 @@ func main() {
 	mux.HandleFunc("DELETE /planta/{slug}", handleDeletePlant)
 	mux.HandleFunc("GET /img/{slug}/{filename}", handleServeImage)
 
-	log.Println("Servidor iniciando en puerto 8080...")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	return mux
 }
 
 func handleHome(w http.ResponseWriter, r *http.Request) {
@@ -369,7 +420,7 @@ func renderPlantGrid(w http.ResponseWriter) {
 		http.Error(w, "Error renderizando template", http.StatusInternalServerError)
 		return
 	}
-	w.Write([]byte(oobSizeSpan()))
+	_, _ = w.Write([]byte(oobSizeSpan()))
 }
 
 func renderPlantDetail(w http.ResponseWriter, plant Plant) {
@@ -377,7 +428,7 @@ func renderPlantDetail(w http.ResponseWriter, plant Plant) {
 		http.Error(w, "Error renderizando template", http.StatusInternalServerError)
 		return
 	}
-	w.Write([]byte(oobSizeSpan()))
+	_, _ = w.Write([]byte(oobSizeSpan()))
 }
 
 func handleUpdatePlant(w http.ResponseWriter, r *http.Request) {
@@ -477,9 +528,9 @@ func handleDeleteImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete image and derived versions
-	os.Remove(imagePath)
-	os.Remove(filepath.Join(imagesDir, ".thumb", derivedName(filename)))
-	os.Remove(filepath.Join(imagesDir, ".display", derivedName(filename)))
+	_ = os.Remove(imagePath)
+	_ = os.Remove(filepath.Join(imagesDir, ".thumb", derivedName(filename)))
+	_ = os.Remove(filepath.Join(imagesDir, ".display", derivedName(filename)))
 
 	// Return updated detail view
 	plant, err := loadPlant(slug)
@@ -564,7 +615,7 @@ func handleServeImage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error abriendo imagen", http.StatusInternalServerError)
 		return
 	}
-	defer f.Close()
+	defer closeQuiet(f)
 
 	// Content-Type must reflect the actual bytes, not the file extension:
 	// legacy files can be JPEG data stored with a .png name.
@@ -585,6 +636,12 @@ func handleServeImage(w http.ResponseWriter, r *http.Request) {
 }
 
 // Helper functions
+
+// closeQuiet closes c, deliberately discarding the error. Used for deferred
+// closes where the read side already dictates the outcome.
+func closeQuiet(c io.Closer) {
+	_ = c.Close()
+}
 
 func createSlug(name string) string {
 	// Convert to lowercase and normalize
@@ -739,21 +796,21 @@ func saveImages(slug string, files []*multipart.FileHeader) error {
 		buffer := make([]byte, 512)
 		_, err = file.Read(buffer)
 		if err != nil {
-			file.Close()
+			closeQuiet(file)
 			continue
 		}
-		file.Seek(0, 0)
+		_, _ = file.Seek(0, 0)
 
 		contentType := http.DetectContentType(buffer)
 		if !isValidImageType(contentType) {
-			file.Close()
+			closeQuiet(file)
 			continue
 		}
 
 		// Sanitize filename
 		filename := sanitizeFilename(fileHeader.Filename)
 		if filename == "" {
-			file.Close()
+			closeQuiet(file)
 			continue
 		}
 
@@ -764,16 +821,16 @@ func saveImages(slug string, files []*multipart.FileHeader) error {
 		originalPath := filepath.Join(imagesDir, filename)
 		dst, err := os.Create(originalPath)
 		if err != nil {
-			file.Close()
+			closeQuiet(file)
 			continue
 		}
 
 		_, err = io.Copy(dst, file)
-		dst.Close()
-		file.Close()
+		closeQuiet(dst)
+		closeQuiet(file)
 
 		if err != nil {
-			os.Remove(originalPath)
+			_ = os.Remove(originalPath)
 			continue
 		}
 
@@ -925,7 +982,7 @@ func createDerived(srcPath, dstPath string, maxSize int) error {
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer closeQuiet(srcFile)
 
 	img, err := decodeImage(srcFile)
 	if err != nil {
@@ -998,7 +1055,7 @@ func ensureDerived(originalPath, derivedPath string, maxSize int) error {
 // images/ directory under data/plants (originals + derived versions).
 func totalImageSize() int64 {
 	var total int64
-	filepath.WalkDir(plantsDir, func(path string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(plantsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}

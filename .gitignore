@@ -43,3 +43,7 @@ tmp/
 *.tmp
 # Otro proyecto (plan mis-plantas)
 new-features/
+
+# logs temporales opencode/make
+.opencode-checks.log
+.make-ci.log

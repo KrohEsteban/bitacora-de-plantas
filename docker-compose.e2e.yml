@@ -1,0 +1,48 @@
+# Isolated stack for end-to-end tests: the real app plus a chromedp runner on
+# a private network. Project name is always bitacora-e2e (set via -p), so
+# neither the ports nor the volumes collide with the production stack on the
+# host (the app is NOT published on any host port here).
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATA_DIR: /app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+      start_period: 10s
+    volumes:
+      - app-data:/app/data
+
+  e2e:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      target: e2e
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      E2E_APP_URL: http://app:8080
+      CHROME_BIN: /usr/bin/chromium
+    volumes:
+      - .:/workspace
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    working_dir: /workspace
+    command: ["go", "test", "-tags", "e2e", "-count=1", "-v", "./e2e/..."]
+
+volumes:
+  app-data:
+  # Shared with the Makefile's docker run invocations; external so `down -v`
+  # never wipes the module/build cache.
+  go-mod-cache:
+    name: bitacora-go-mod-cache
+    external: true
+  go-build-cache:
+    name: bitacora-go-build-cache
+    external: true
