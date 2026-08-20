@@ -1,0 +1,25 @@
+name: Unit tests
+
+# One workflow per check so a failure maps clearly to a single concern.
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'releases/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run make test
+        run: make test
