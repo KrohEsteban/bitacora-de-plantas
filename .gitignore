@@ -13,6 +13,7 @@ bitacora-plantas
 
 # Test binary, built with `go test -c`
 *.test
+!Dockerfile.test
 
 # Output of the go coverage tool
 *.out
@@ -43,3 +44,7 @@ tmp/
 *.tmp
 # Otro proyecto (plan mis-plantas)
 new-features/
+
+# logs temporales opencode/make
+.opencode-checks.log
+.make-ci.log

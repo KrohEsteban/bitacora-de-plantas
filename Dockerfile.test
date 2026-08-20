@@ -1,0 +1,30 @@
+# Multi-stage test toolchain used by the Makefile so every check runs inside
+# Docker:
+#   base -> Go toolchain + shell tools
+#   lint -> base + golangci-lint          (make lint)
+#   e2e  -> base + headless Chromium      (make test-e2e)
+FROM golang:1.23-alpine AS base
+
+RUN apk add --no-cache git make curl ca-certificates tzdata
+
+# ---------------------------------------------------------------------------
+# lint: golangci-lint
+# ---------------------------------------------------------------------------
+FROM base AS lint
+
+ARG GOLANGCI_LINT_VERSION=v1.60.3
+RUN wget -qO- https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+    | sh -s -- -b /usr/local/bin ${GOLANGCI_LINT_VERSION}
+
+# ---------------------------------------------------------------------------
+# e2e: headless Chromium driven by chromedp (speaks CDP directly, no
+# chromedriver binary needed).
+# ---------------------------------------------------------------------------
+FROM base AS e2e
+
+RUN apk add --no-cache chromium font-noto harfbuzz
+
+# Alpine installs chromium as /usr/bin/chromium-browser; expose a stable
+# /usr/bin/chromium path for chromedp's default lookup and CHROME_BIN.
+RUN ln -sf /usr/bin/chromium-browser /usr/bin/chromium || true
+ENV CHROME_BIN=/usr/bin/chromium

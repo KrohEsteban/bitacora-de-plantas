@@ -1,0 +1,27 @@
+name: Lint
+
+# One workflow per check so a failure maps clearly to a single concern.
+# More per-check files can be added the same way later (e.g. a future
+# spellcheck.yml once a spellcheck tool is set up).
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'releases/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run make lint
+        run: make lint

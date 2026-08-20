@@ -1,0 +1,25 @@
+name: E2E
+
+# One workflow per check so a failure maps clearly to a single concern.
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'releases/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run make test-e2e
+        run: make test-e2e

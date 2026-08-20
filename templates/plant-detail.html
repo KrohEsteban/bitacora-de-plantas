@@ -12,7 +12,7 @@
                 </div>
             {{end}}
             <div class="plant-detail-meta">
-                <span>📅 Creada el {{.CreatedAt.Format "2 de January de 2006"}}</span>
+                <span>📅 Creada el {{formatDate .CreatedAt}}</span>
                 {{if .Images}}
                     <span>📸 {{len .Images}} imágenes</span>
                 {{end}}
@@ -40,7 +40,7 @@
                      alt="{{$.Name}}" 
                      class="gallery-image"
                      loading="lazy">
-                <span class="gallery-date">{{.ModTime.Format "02/01/2006"}}</span>
+                <span class="gallery-date">{{formatDateShort .ModTime}}</span>
                 <button hx-delete="/planta/{{$.Slug}}/imagenes/{{.Name}}"
                         hx-target="#detail-container"
                         hx-swap="innerHTML"
