@@ -2,7 +2,7 @@
 # command is what CI (GitHub Actions) runs.
 #
 #   make lint       golangci-lint inside a container
-#   make test       unit + integration tests (go test .)
+#   make test       unit + integration tests (go test ./test/unit/...)
 #   make test-e2e   chromedp E2E against the app in an isolated compose stack
 #   make ci         lint + test + test-e2e, in order
 #   make up / down  docker compose helpers for the app itself
@@ -27,7 +27,7 @@ lint: build
 		-w /workspace \
 		-v $(GO_MOD_CACHE):/go/pkg/mod \
 		-v $(GO_BUILD_CACHE):/root/.cache/go-build \
-		-e GOFLAGS=-mod=mod \
+		-e GOFLAGS="-mod=mod -buildvcs=false" \
 		$(TEST_IMAGE_LINT) sh -c "go mod download && golangci-lint run ./..."
 
 .PHONY: test
@@ -38,7 +38,7 @@ test: build
 		-v $(GO_MOD_CACHE):/go/pkg/mod \
 		-v $(GO_BUILD_CACHE):/root/.cache/go-build \
 		-e GOFLAGS=-mod=mod \
-		$(TEST_IMAGE_LINT) go test -count=1 -cover -v .
+		$(TEST_IMAGE_LINT) go test -count=1 -cover -v ./test/unit/...
 
 .PHONY: test-e2e
 test-e2e: build

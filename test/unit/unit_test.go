@@ -1,58 +1,18 @@
-package main
+package unit
 
 import (
 	"bytes"
-	"image"
-	"image/color"
 	"image/jpeg"
-	"image/png"
 	"math/rand"
 	"mime/multipart"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
+
+	"bitacora-plantas/internal/bitacora"
 )
-
-// setupDataDir points the storage globals at an ephemeral temp directory and
-// restores the previous environment afterwards (t.Setenv).
-func setupDataDir(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	t.Setenv("BITACORA_DATA_DIR", dir)
-	initDataDirs()
-	if err := os.MkdirAll(plantsDir, 0755); err != nil {
-		t.Fatalf("creating plants dir: %v", err)
-	}
-	return dir
-}
-
-// testImage returns a small but real encoded image of the given format.
-func testImage(t *testing.T, format string, w, h int) []byte {
-	t.Helper()
-	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			img.Set(x, y, color.RGBA{R: uint8(x % 256), G: uint8(y % 256), B: 128, A: 255})
-		}
-	}
-	var buf bytes.Buffer
-	var err error
-	switch format {
-	case "png":
-		err = png.Encode(&buf, img)
-	case "jpeg":
-		err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90})
-	default:
-		t.Fatalf("unknown test image format %q", format)
-	}
-	if err != nil {
-		t.Fatalf("encoding test image: %v", err)
-	}
-	return buf.Bytes()
-}
 
 func TestCreateSlug(t *testing.T) {
 	tests := []struct {
@@ -70,8 +30,8 @@ func TestCreateSlug(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := createSlug(tt.name); got != tt.want {
-				t.Errorf("createSlug(%q) = %q, want %q", tt.name, got, tt.want)
+			if got := bitacora.CreateSlug(tt.name); got != tt.want {
+				t.Errorf("CreateSlug(%q) = %q, want %q", tt.name, got, tt.want)
 			}
 		})
 	}
@@ -86,8 +46,8 @@ func TestRemoveAccents(t *testing.T) {
 		{"", ""},
 	}
 	for _, tt := range tests {
-		if got := removeAccents(tt.in); got != tt.want {
-			t.Errorf("removeAccents(%q) = %q, want %q", tt.in, got, tt.want)
+		if got := bitacora.RemoveAccents(tt.in); got != tt.want {
+			t.Errorf("RemoveAccents(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }
@@ -107,8 +67,8 @@ func TestSanitizeFilename(t *testing.T) {
 		{"", ""},
 	}
 	for _, tt := range tests {
-		if got := sanitizeFilename(tt.in); got != tt.want {
-			t.Errorf("sanitizeFilename(%q) = %q, want %q", tt.in, got, tt.want)
+		if got := bitacora.SanitizeFilename(tt.in); got != tt.want {
+			t.Errorf("SanitizeFilename(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }
@@ -120,8 +80,8 @@ func TestDerivedName(t *testing.T) {
 		"sin-ext":  "sin-ext.jpg",
 	}
 	for in, want := range tests {
-		if got := derivedName(in); got != want {
-			t.Errorf("derivedName(%q) = %q, want %q", in, got, want)
+		if got := bitacora.DerivedName(in); got != want {
+			t.Errorf("DerivedName(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -129,14 +89,14 @@ func TestDerivedName(t *testing.T) {
 func TestIsValidImageType(t *testing.T) {
 	valid := []string{"image/jpeg", "image/png", "image/webp"}
 	for _, ct := range valid {
-		if !isValidImageType(ct) {
-			t.Errorf("isValidImageType(%q) = false, want true", ct)
+		if !bitacora.IsValidImageType(ct) {
+			t.Errorf("IsValidImageType(%q) = false, want true", ct)
 		}
 	}
 	invalid := []string{"text/plain", "application/pdf", "image/gif", ""}
 	for _, ct := range invalid {
-		if isValidImageType(ct) {
-			t.Errorf("isValidImageType(%q) = true, want false", ct)
+		if bitacora.IsValidImageType(ct) {
+			t.Errorf("IsValidImageType(%q) = true, want false", ct)
 		}
 	}
 }
@@ -153,8 +113,8 @@ func TestIsImageFile(t *testing.T) {
 		".hidden":   false,
 	}
 	for name, want := range tests {
-		if got := isImageFile(name); got != want {
-			t.Errorf("isImageFile(%q) = %v, want %v", name, got, want)
+		if got := bitacora.IsImageFile(name); got != want {
+			t.Errorf("IsImageFile(%q) = %v, want %v", name, got, want)
 		}
 	}
 }
@@ -170,26 +130,26 @@ func TestFormatMB(t *testing.T) {
 		{1048576 + 524288, "1,50"},
 	}
 	for _, tt := range tests {
-		if got := formatMB(tt.in); got != tt.want {
-			t.Errorf("formatMB(%d) = %q, want %q", tt.in, got, tt.want)
+		if got := bitacora.FormatMB(tt.in); got != tt.want {
+			t.Errorf("FormatMB(%d) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }
 
 func TestFormatDates(t *testing.T) {
 	ts := time.Date(2026, time.August, 19, 23, 30, 0, 0, time.UTC)
-	if got := formatDate(ts); got != "19 de August de 2026" {
-		t.Errorf("formatDate = %q", got)
+	if got := bitacora.FormatDate(ts); got != "19 de August de 2026" {
+		t.Errorf("FormatDate = %q", got)
 	}
-	if got := formatDateShort(ts); got != "19/08/2026" {
-		t.Errorf("formatDateShort = %q", got)
+	if got := bitacora.FormatDateShort(ts); got != "19/08/2026" {
+		t.Errorf("FormatDateShort = %q", got)
 	}
 }
 
 func TestSizeLabelEmpty(t *testing.T) {
 	setupDataDir(t)
-	if got, want := sizeLabel(), "📦 Peso total de imágenes: 0,00 MB"; got != want {
-		t.Errorf("sizeLabel() = %q, want %q", got, want)
+	if got, want := bitacora.SizeLabel(), "📦 Peso total de imágenes: 0,00 MB"; got != want {
+		t.Errorf("SizeLabel() = %q, want %q", got, want)
 	}
 }
 
@@ -208,8 +168,8 @@ func TestEnsureUniqueFilename(t *testing.T) {
 		{"nuevo.webp", "nuevo.webp"},
 	}
 	for _, tt := range tests {
-		if got := ensureUniqueFilename(dir, tt.in); got != tt.want {
-			t.Errorf("ensureUniqueFilename(%q) = %q, want %q", tt.in, got, tt.want)
+		if got := bitacora.EnsureUniqueFilename(dir, tt.in); got != tt.want {
+			t.Errorf("EnsureUniqueFilename(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 
@@ -217,33 +177,21 @@ func TestEnsureUniqueFilename(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "foto_1.png"), []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if got := ensureUniqueFilename(dir, "foto_1.png"); got != "foto_1_1.png" {
-		t.Errorf("ensureUniqueFilename(foto_1.png) = %q, want foto_1_1.png", got)
+	if got := bitacora.EnsureUniqueFilename(dir, "foto_1.png"); got != "foto_1_1.png" {
+		t.Errorf("EnsureUniqueFilename(foto_1.png) = %q, want foto_1_1.png", got)
 	}
 }
 
 func TestEnsureUniqueSlug(t *testing.T) {
 	setupDataDir(t)
-	if err := os.MkdirAll(filepath.Join(plantsDir, "rosa"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(bitacora.PlantsDir, "rosa"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if got := ensureUniqueSlug("rosa"); got != "rosa-1" {
-		t.Errorf("ensureUniqueSlug(rosa) = %q, want rosa-1", got)
+	if got := bitacora.EnsureUniqueSlug("rosa"); got != "rosa-1" {
+		t.Errorf("EnsureUniqueSlug(rosa) = %q, want rosa-1", got)
 	}
-	if got := ensureUniqueSlug("tulipan"); got != "tulipan" {
-		t.Errorf("ensureUniqueSlug(tulipan) = %q, want tulipan", got)
-	}
-}
-
-// mkdirPlantDirs creates the on-disk layout handleCreatePlant would for a
-// plant: <plants>/<slug>/images/{,.thumb,.display}.
-func mkdirPlantDirs(t *testing.T, slug string) {
-	t.Helper()
-	imgDir := filepath.Join(plantsDir, slug, "images")
-	for _, d := range []string{".thumb", ".display"} {
-		if err := os.MkdirAll(filepath.Join(imgDir, d), 0755); err != nil {
-			t.Fatal(err)
-		}
+	if got := bitacora.EnsureUniqueSlug("tulipan"); got != "tulipan" {
+		t.Errorf("EnsureUniqueSlug(tulipan) = %q, want tulipan", got)
 	}
 }
 
@@ -251,56 +199,56 @@ func TestPlantStorage(t *testing.T) {
 	setupDataDir(t)
 
 	now := time.Now()
-	first := Plant{Name: "Rosa", Description: "primera", CreatedAt: now.Add(-time.Hour), Slug: "rosa"}
+	first := bitacora.Plant{Name: "Rosa", Description: "primera", CreatedAt: now.Add(-time.Hour), Slug: "rosa"}
 	mkdirPlantDirs(t, "rosa")
-	if err := savePlantMeta("rosa", first); err != nil {
-		t.Fatalf("savePlantMeta: %v", err)
+	if err := bitacora.SavePlantMeta("rosa", first); err != nil {
+		t.Fatalf("SavePlantMeta: %v", err)
 	}
-	second := Plant{Name: "Tulipán", Description: "segunda", CreatedAt: now, Slug: "tulipan"}
+	second := bitacora.Plant{Name: "Tulipán", Description: "segunda", CreatedAt: now, Slug: "tulipan"}
 	mkdirPlantDirs(t, "tulipan")
-	if err := savePlantMeta("tulipan", second); err != nil {
-		t.Fatalf("savePlantMeta: %v", err)
+	if err := bitacora.SavePlantMeta("tulipan", second); err != nil {
+		t.Fatalf("SavePlantMeta: %v", err)
 	}
 
 	// Loaded plant round-trips the metadata.
-	got, err := loadPlant("rosa")
+	got, err := bitacora.LoadPlant("rosa")
 	if err != nil {
-		t.Fatalf("loadPlant: %v", err)
+		t.Fatalf("LoadPlant: %v", err)
 	}
 	if got.Name != "Rosa" || got.Description != "primera" || got.Slug != "rosa" {
-		t.Errorf("loadPlant mismatch: %+v", got)
+		t.Errorf("LoadPlant mismatch: %+v", got)
 	}
 	if !got.CreatedAt.Equal(first.CreatedAt) {
 		t.Errorf("CreatedAt round-trip mismatch: %v != %v", got.CreatedAt, first.CreatedAt)
 	}
 
 	// Newest first ordering.
-	all, err := loadAllPlants()
+	all, err := bitacora.LoadAllPlants()
 	if err != nil {
-		t.Fatalf("loadAllPlants: %v", err)
+		t.Fatalf("LoadAllPlants: %v", err)
 	}
 	if len(all) != 2 {
-		t.Fatalf("loadAllPlants returned %d plants, want 2", len(all))
+		t.Fatalf("LoadAllPlants returned %d plants, want 2", len(all))
 	}
 	if all[0].Slug != "tulipan" || all[1].Slug != "rosa" {
-		t.Errorf("loadAllPlants ordering wrong: %v", []string{all[0].Slug, all[1].Slug})
+		t.Errorf("LoadAllPlants ordering wrong: %v", []string{all[0].Slug, all[1].Slug})
 	}
 
 	// Missing plant.
-	if _, err := loadPlant("no-existe"); !os.IsNotExist(err) {
-		t.Errorf("loadPlant(missing) err = %v, want IsNotExist", err)
+	if _, err := bitacora.LoadPlant("no-existe"); !os.IsNotExist(err) {
+		t.Errorf("LoadPlant(missing) err = %v, want IsNotExist", err)
 	}
 }
 
 func TestPlantImages(t *testing.T) {
 	setupDataDir(t)
 
-	plant := Plant{Name: "Aloe", Slug: "aloe"}
+	plant := bitacora.Plant{Name: "Aloe", Slug: "aloe"}
 	mkdirPlantDirs(t, "aloe")
-	if err := savePlantMeta("aloe", plant); err != nil {
-		t.Fatalf("savePlantMeta: %v", err)
+	if err := bitacora.SavePlantMeta("aloe", plant); err != nil {
+		t.Fatalf("SavePlantMeta: %v", err)
 	}
-	dir := filepath.Join(plantsDir, "aloe", "images")
+	dir := filepath.Join(bitacora.PlantsDir, "aloe", "images")
 	if err := os.MkdirAll(filepath.Join(dir, ".thumb"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -326,9 +274,9 @@ func TestPlantImages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	loaded, err := loadPlant("aloe")
+	loaded, err := bitacora.LoadPlant("aloe")
 	if err != nil {
-		t.Fatalf("loadPlant: %v", err)
+		t.Fatalf("LoadPlant: %v", err)
 	}
 	if len(loaded.Images) != 2 {
 		t.Fatalf("loaded %d images, want 2", len(loaded.Images))
@@ -344,7 +292,7 @@ func TestPlantImages(t *testing.T) {
 func TestTotalImageSize(t *testing.T) {
 	setupDataDir(t)
 
-	imgDir := filepath.Join(plantsDir, "rosa", "images")
+	imgDir := filepath.Join(bitacora.PlantsDir, "rosa", "images")
 	if err := os.MkdirAll(filepath.Join(imgDir, ".thumb"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -357,12 +305,12 @@ func TestTotalImageSize(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 300 bytes inside the plant folder but OUTSIDE images/... must be ignored.
-	if err := os.WriteFile(filepath.Join(plantsDir, "rosa", "meta.json"), bytes.Repeat([]byte("m"), 300), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(bitacora.PlantsDir, "rosa", "meta.json"), bytes.Repeat([]byte("m"), 300), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	if got := totalImageSize(); got != 700 {
-		t.Errorf("totalImageSize() = %d, want 700", got)
+	if got := bitacora.TotalImageSize(); got != 700 {
+		t.Errorf("TotalImageSize() = %d, want 700", got)
 	}
 }
 
@@ -376,9 +324,9 @@ func TestDecodeImageByContent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.format, func(t *testing.T) {
 			raw := testImage(t, tt.format, 40, 30)
-			img, err := decodeImage(bytes.NewReader(raw))
+			img, err := bitacora.DecodeImage(bytes.NewReader(raw))
 			if err != nil {
-				t.Fatalf("decodeImage: %v", err)
+				t.Fatalf("DecodeImage: %v", err)
 			}
 			if img.Bounds().Dx() != 40 || img.Bounds().Dy() != 30 {
 				t.Errorf("decoded size %v, want 40x30", img.Bounds())
@@ -386,8 +334,8 @@ func TestDecodeImageByContent(t *testing.T) {
 		})
 	}
 
-	if _, err := decodeImage(bytes.NewReader([]byte("not an image at all"))); err == nil {
-		t.Error("decodeImage accepted non-image content")
+	if _, err := bitacora.DecodeImage(bytes.NewReader([]byte("not an image at all"))); err == nil {
+		t.Error("DecodeImage accepted non-image content")
 	}
 }
 
@@ -400,16 +348,16 @@ func TestCreateDerived(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dst := filepath.Join(plantsDir, "derived.jpg")
-	if err := createDerived(src, dst, thumbnailSize); err != nil {
-		t.Fatalf("createDerived: %v", err)
+	dst := filepath.Join(bitacora.PlantsDir, "derived.jpg")
+	if err := bitacora.CreateDerived(src, dst, bitacora.ThumbnailSize); err != nil {
+		t.Fatalf("CreateDerived: %v", err)
 	}
 
 	f, err := os.Open(dst)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer closeQuiet(f)
+	defer func() { _ = f.Close() }()
 
 	// Derived files are always real JPEGs with the long side <= maxSize.
 	img, err := jpeg.Decode(f)
@@ -417,56 +365,26 @@ func TestCreateDerived(t *testing.T) {
 		t.Fatalf("decoding derived file: %v", err)
 	}
 	w, h := img.Bounds().Dx(), img.Bounds().Dy()
-	if w > thumbnailSize || h > thumbnailSize {
-		t.Errorf("derived size %dx%d exceeds %d", w, h, thumbnailSize)
+	if w > bitacora.ThumbnailSize || h > bitacora.ThumbnailSize {
+		t.Errorf("derived size %dx%d exceeds %d", w, h, bitacora.ThumbnailSize)
 	}
 	if w != 400 || h != 200 {
 		t.Errorf("derived size = %dx%d, want 400x200", w, h)
 	}
 
-	// ensureDerived is idempotent and does not regenerate existing files.
-	if err := ensureDerived(src, dst, thumbnailSize); err != nil {
-		t.Fatalf("ensureDerived: %v", err)
+	// EnsureDerived is idempotent and does not regenerate existing files.
+	if err := bitacora.EnsureDerived(src, dst, bitacora.ThumbnailSize); err != nil {
+		t.Fatalf("EnsureDerived: %v", err)
 	}
-}
-
-// multipartHeader builds a parsed multipart.FileHeader for the given content.
-func multipartHeader(t *testing.T, filename string, content []byte) *multipart.FileHeader {
-	t.Helper()
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	fw, err := mw.CreateFormFile("images", filename)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := fw.Write(content); err != nil {
-		t.Fatal(err)
-	}
-	if err := mw.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	req, err := http.NewRequest("POST", "/", &buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	if err := req.ParseMultipartForm(1 << 20); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = req.MultipartForm.RemoveAll()
-	})
-	return req.MultipartForm.File["images"][0]
 }
 
 func TestSaveImages(t *testing.T) {
 	setupDataDir(t)
 
-	plant := Plant{Name: "Hortensia", Slug: "hortensia"}
+	plant := bitacora.Plant{Name: "Hortensia", Slug: "hortensia"}
 	mkdirPlantDirs(t, "hortensia")
-	if err := savePlantMeta("hortensia", plant); err != nil {
-		t.Fatalf("savePlantMeta: %v", err)
+	if err := bitacora.SavePlantMeta("hortensia", plant); err != nil {
+		t.Fatalf("SavePlantMeta: %v", err)
 	}
 
 	files := []*multipart.FileHeader{
@@ -474,11 +392,11 @@ func TestSaveImages(t *testing.T) {
 		multipartHeader(t, "no-imagen.txt", []byte("hola, esto no es una imagen")),
 	}
 
-	if err := saveImages("hortensia", files); err != nil {
-		t.Fatalf("saveImages: %v", err)
+	if err := bitacora.SaveImages("hortensia", files); err != nil {
+		t.Fatalf("SaveImages: %v", err)
 	}
 
-	imgDir := filepath.Join(plantsDir, "hortensia", "images")
+	imgDir := filepath.Join(bitacora.PlantsDir, "hortensia", "images")
 	if _, err := os.Stat(filepath.Join(imgDir, "foto.png")); err != nil {
 		t.Errorf("original image not saved: %v", err)
 	}
@@ -498,16 +416,16 @@ func TestPopulateMosaics(t *testing.T) {
 	rng := rand.New(rand.NewSource(42))
 
 	// No images -> no layout.
-	plants := []Plant{{Name: "A", Images: nil}}
-	populateMosaics(plants, rng)
+	plants := []bitacora.Plant{{Name: "A", Images: nil}}
+	bitacora.PopulateMosaics(plants, rng)
 	if plants[0].MosaicLayout != nil {
 		t.Error("empty plant should have nil mosaic")
 	}
 
 	// Single image -> one centered photo.
-	img := []Image{{Name: "a.png", URL: "/img/x/a.png"}}
-	plants = []Plant{{Name: "A", Images: img}}
-	populateMosaics(plants, rng)
+	img := []bitacora.Image{{Name: "a.png", URL: "/img/x/a.png"}}
+	plants = []bitacora.Plant{{Name: "A", Images: img}}
+	bitacora.PopulateMosaics(plants, rng)
 	if len(plants[0].MosaicLayout) != 1 {
 		t.Fatalf("single image layout len = %d, want 1", len(plants[0].MosaicLayout))
 	}
@@ -516,12 +434,12 @@ func TestPopulateMosaics(t *testing.T) {
 	}
 
 	// More than 5 images -> capped at 5, all positions within the circle.
-	imgs := make([]Image, 8)
+	imgs := make([]bitacora.Image, 8)
 	for i := range imgs {
-		imgs[i] = Image{Name: "i" + strconv.Itoa(i) + ".png", URL: "/img/x/i" + strconv.Itoa(i) + ".png"}
+		imgs[i] = bitacora.Image{Name: "i" + strconv.Itoa(i) + ".png", URL: "/img/x/i" + strconv.Itoa(i) + ".png"}
 	}
-	plants = []Plant{{Name: "B", Images: imgs}}
-	populateMosaics(plants, rng)
+	plants = []bitacora.Plant{{Name: "B", Images: imgs}}
+	bitacora.PopulateMosaics(plants, rng)
 	if len(plants[0].MosaicLayout) != 5 {
 		t.Fatalf("8-image layout len = %d, want 5", len(plants[0].MosaicLayout))
 	}
@@ -539,9 +457,9 @@ func TestPopulateMosaics(t *testing.T) {
 
 func TestOobSizeSpan(t *testing.T) {
 	setupDataDir(t)
-	span := oobSizeSpan()
+	span := bitacora.OobSizeSpan()
 	if span == "" {
-		t.Fatal("oobSizeSpan returned empty string")
+		t.Fatal("OobSizeSpan returned empty string")
 	}
 	if !bytes.Contains([]byte(span), []byte(`id="total-size"`)) {
 		t.Errorf("oob span missing id: %s", span)

@@ -73,7 +73,7 @@ exact same pipeline as CI: **lint + unit/integration tests + E2E**, in order.
 
 ```bash
 make lint        # golangci-lint in a container
-make test        # unit + integration tests (go test .)
+make test        # unit + integration tests (go test ./test/unit/...)
 make test-e2e    # real headless Chromium (chromedp) against the app
 make ci          # lint + test + test-e2e
 ```
@@ -85,12 +85,10 @@ it never touches a running app on port 8080.
 
 ```
 bitacora-plantas/
-├── main.go                 # application + storage + image pipeline
-├── main_test.go            # unit tests
-├── main_integration_test.go # integration tests (httptest, temp data dir)
-├── main_integration2_test.go
-├── e2e/                    # chromedp end-to-end tests (build tag: e2e)
-│   └── e2e_test.go
+├── main.go                 # thin entrypoint (delegates to internal/bitacora)
+├── internal/bitacora/      # application: storage, image pipeline, HTTP handler
+├── test/unit/              # unit + integration tests (httptest, temp data dir)
+├── test/e2e/               # chromedp end-to-end tests (build tag: e2e)
 ├── templates/              # index, plant grid, plant detail
 ├── static/                 # CSS
 ├── Dockerfile              # production image
@@ -100,6 +98,7 @@ bitacora-plantas/
 ├── Makefile                # all checks run inside Docker
 ├── .golangci.yml           # linter configuration
 ├── .github/workflows/ci.yml # CI pipeline (runs make ci)
+├── .github/workflows/cd.yml # CD placeholder (deploy when an AWS target exists)
 └── doc/                    # Spanish user guide + task/plan documents
 ```
 
